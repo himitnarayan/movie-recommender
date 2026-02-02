@@ -1,4 +1,3 @@
-
 #🎬 Movie Recommender System (1M TMDB Dataset)
 
 A scalable Content-Based Movie Recommendation System built using:
