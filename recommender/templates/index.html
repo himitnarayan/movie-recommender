@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Movie Recommender</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f4f6f8;
+            text-align: center;
+        }
+
+        h1 {
+            margin-top: 30px;
+        }
+
+        input {
+            padding: 12px;
+            width: 350px;
+            font-size: 16px;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+        }
+
+        button {
+            padding: 12px 20px;
+            font-size: 16px;
+            border-radius: 6px;
+            border: none;
+            background: #007bff;
+            color: white;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #0056b3;
+        }
+
+        .movies {
+            margin: 40px auto;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 25px;
+            max-width: 1200px;
+        }
+
+        .card {
+            width: 180px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            padding: 10px;
+            transition: transform 0.2s;
+        }
+
+        .card:hover {
+            transform: scale(1.05);
+        }
+
+        img {
+            width: 100%;
+            border-radius: 8px;
+        }
+
+        h3 {
+            font-size: 14px;
+            margin: 10px 0 0 0;
+        }
+
+        .error {
+            color: red;
+            margin-top: 20px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>🎬 Movie Recommender System</h1>
+
+    <input type="text" id="movieInput" placeholder="Enter movie name..." />
+    <button onclick="getRecommendations()">Search</button>
+
+    <div id="message" class="error"></div>
+    <div class="movies" id="movies"></div>
+
+<script>
+function getRecommendations() {
+    const movie = document.getElementById('movieInput').value;
+    const container = document.getElementById('movies');
+    const message = document.getElementById('message');
+
+    container.innerHTML = "";
+    message.innerHTML = "";
+
+    if (!movie) {
+        message.innerHTML = "Please enter a movie name.";
+        return;
+    }
+
+    container.innerHTML = "Loading...";
+
+    fetch(`/api/recommend/?movie=${encodeURIComponent(movie)}`)
+        .then(res => res.json())
+        .then(data => {
+            container.innerHTML = "";
+
+            if (data.error) {
+                message.innerHTML = data.error;
+                return;
+            }
+
+            data.forEach(m => {
+                const card = document.createElement('div');
+                card.className = "card";
+
+                card.innerHTML = `
+                    <a href="${m.link}" target="_blank">
+                        <img src="${m.poster}" />
+                    </a>
+                    <h3>${m.title}</h3>
+                `;
+
+                container.appendChild(card);
+            });
+        });
+}
+</script>
+
+</body>
+</html>

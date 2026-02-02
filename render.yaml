@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: movie-recommender
+    env: python
+    buildCommand: "./build.sh"
+    startCommand: "gunicorn moviesite.wsgi:application"
+    plan: free

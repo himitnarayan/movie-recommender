@@ -1,0 +1,13 @@
+# Ignore data and artifacts
+recommenders/data/
+recommender/artifacts/
+
+# Ignore generated files
+*.csv
+*.npz
+*.pkl
+staticfiles/
+
+# Python
+__pycache__/
+*.pyc
