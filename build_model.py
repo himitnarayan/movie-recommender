@@ -10,6 +10,7 @@ from scipy.sparse import save_npz
 ARTIFACT_DIR = "recommender/artifacts"
 os.makedirs(ARTIFACT_DIR, exist_ok=True)
 
+# ---------------- Find CSV automatically ----------------
 print("Searching for CSV dataset...")
 csv_files = glob.glob("recommender/data/*.csv")
 
@@ -19,7 +20,7 @@ if not csv_files:
 DATA_PATH = csv_files[0]
 print("Using dataset:", DATA_PATH)
 
-# ---------------- Load only required columns ----------------
+# ---------------- Load required columns ----------------
 cols = [
     "id",
     "title",
@@ -32,10 +33,15 @@ cols = [
 
 print("Loading dataset...")
 df = pd.read_csv(DATA_PATH, usecols=cols, low_memory=False)
-
 df = df.dropna(subset=["title", "overview"]).drop_duplicates("id")
 
-# ---------------- Helper functions ----------------
+# ---------------- Reduce dataset for speed (IMPORTANT) ----------------
+print("Reducing dataset size for fast processing...")
+df = df.sort_values(by="popularity", ascending=False)
+df = df.head(60000)
+print("Dataset reduced to:", len(df))
+
+# ---------------- Helper to parse JSON columns ----------------
 def parse_names(text):
     try:
         items = literal_eval(text)
@@ -60,7 +66,7 @@ df['soup'] = (
 print("Vectorizing with TF-IDF...")
 tfidf = TfidfVectorizer(
     stop_words="english",
-    max_features=30000   # important for Render RAM
+    max_features=30000
 )
 
 tfidf_matrix = tfidf.fit_transform(df['soup'])
