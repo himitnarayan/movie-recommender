@@ -5,3 +5,8 @@ pandas
 scikit-learn
 scipy
 tqdm
+mlflow
+sentence-transformers
+faiss-cpu
+google-generativeai
+python-dotenv
