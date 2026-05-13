@@ -91,15 +91,15 @@ for i in tqdm(range(0, len(df), batch_size)):
     # 3. Generate Sparse Vectors
     sparse_vectors = bm25.encode_documents(batch_df['soup'].tolist())
     
-    # 4. Generate Metadata
-    metadata = [
-        {
-            "title": row['title'],
-            "overview": row['overview'],
-            "poster_path": row['poster_path']
-        }
-        for _, row in batch_df.iterrows()
-    ]
+    # 4. Generate Metadata (Pinecone does not allow null values)
+    metadata = []
+    for _, row in batch_df.iterrows():
+        poster = row['poster_path']
+        metadata.append({
+            "title": str(row['title']),
+            "overview": str(row['overview']),
+            "poster_path": str(poster) if pd.notna(poster) else ""
+        })
     
     # 5. Assemble and Upsert
     records = []
