@@ -1,50 +1,56 @@
-import pickle
-import pandas as pd
-import numpy as np
-from scipy.sparse import load_npz
-from pathlib import Path
-import faiss
 import os
+from pinecone import Pinecone
+from pinecone_text.sparse import BM25Encoder
 import google.generativeai as genai
 from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
 
 load_dotenv()
 
-ARTIFACTS = Path("recommender/artifacts")
-
 # Global placeholders
-tfidf = None
-nn_tfidf = None
-tfidf_matrix = None
-movies = None
-title_to_index = None
-faiss_index = None
+pc_index = None
 embedder = None
+bm25 = None
 
-def load_model():
-    global tfidf, nn_tfidf, tfidf_matrix, movies, title_to_index, faiss_index, embedder
+def load_cloud_models():
+    global pc_index, embedder, bm25
 
-    if tfidf is None:
-        print("Loading model artifacts...")
-
-        tfidf = pickle.load(open(ARTIFACTS / "tfidf.pkl", "rb"))
-        nn_tfidf = pickle.load(open(ARTIFACTS / "nn_tfidf.pkl", "rb"))
-        tfidf_matrix = load_npz(ARTIFACTS / "tfidf_vectors.npz")
-        movies = pd.read_csv(ARTIFACTS / "movie_index.csv")
+    if pc_index is None:
+        print("Connecting to Pinecone Cloud Vector DB...")
         
-        # Load Neural Embeddings
-        faiss_index = faiss.read_index(str(ARTIFACTS / "faiss_index.bin"))
+        # 1. Connect to Pinecone
+        pinecone_key = os.environ.get("PINECONE_API_KEY")
+        if not pinecone_key:
+            print("WARNING: PINECONE_API_KEY not found in environment.")
+            return
+            
+        pc = Pinecone(api_key=pinecone_key)
+        index_name = "movie-hybrid-search"
+        
+        # Ensure the index exists, then connect
+        if index_name in [idx.name for idx in pc.list_indexes()]:
+            pc_index = pc.Index(index_name)
+        else:
+            print(f"Index {index_name} does not exist in Pinecone.")
+            return
+
+        # 2. Load Neural Embedding Model (Small, runs fast in 512MB RAM)
         embedder = SentenceTransformer("all-MiniLM-L6-v2")
+        
+        # 3. Load BM25 Sparse Encoder params (Created in Colab)
+        bm25 = BM25Encoder()
+        # In a real scenario, you download bm25_params.json from Colab and place it here
+        # bm25.load("recommender/artifacts/bm25_params.json")
+        # For this demo, we'll initialize a dummy one if file doesn't exist
+        try:
+            bm25.load("recommender/artifacts/bm25_params.json")
+        except:
+            print("Warning: bm25_params.json not found. Sparse search will be skipped.")
 
-        title_to_index = pd.Series(
-            movies.index, index=movies['title']
-        ).drop_duplicates()
-
-        # Configure Gemini for explainability
-        api_key = os.environ.get("GOOGLE_API_KEY")
-        if api_key:
-            genai.configure(api_key=api_key)
+        # 4. Configure Gemini
+        gemini_key = os.environ.get("GOOGLE_API_KEY")
+        if gemini_key:
+            genai.configure(api_key=gemini_key)
 
 def generate_explanation(query_title, recommended_title, recommended_overview):
     try:
@@ -61,60 +67,58 @@ def generate_explanation(query_title, recommended_title, recommended_overview):
         return "Because it shares similar themes, genres, or keywords."
 
 def recommend(movie_title, top_n=10, algorithm="hybrid"):
-    load_model()
+    load_cloud_models()
 
-    if movie_title not in title_to_index:
-        return {"error": f"'{movie_title}' not found in database."}
+    if pc_index is None:
+        return {"error": "Pinecone database is not connected. Add PINECONE_API_KEY."}
 
-    idx = title_to_index[movie_title]
-    query_overview = movies.iloc[idx]['overview']
-
-    scores = {}
-
-    # 1. TF-IDF Search (Keyword Matching)
-    distances_tfidf, indices_tfidf = nn_tfidf.kneighbors(
-        tfidf_matrix[idx],
-        n_neighbors=top_n * 2
-    )
+    # 1. Encode user query into dense vector
+    dense_vector = embedder.encode(movie_title).tolist()
     
-    if algorithm in ["tfidf", "hybrid"]:
-        for rank, i in enumerate(indices_tfidf[0]):
-            if i == idx: continue
-            weight = 1.0 if algorithm == "tfidf" else 0.4
-            scores[i] = scores.get(i, 0) + (1.0 / (rank + 1)) * weight
+    # 2. Encode user query into sparse vector
+    sparse_vector = None
+    try:
+        sparse_vector = bm25.encode_queries(movie_title)
+    except:
+        pass # If BM25 isn't loaded, skip it
 
-    # 2. Semantic Search (FAISS)
-    if algorithm == "hybrid":
-        query_text = f"{movie_title}: {query_overview}"
-        query_vector = embedder.encode([query_text], convert_to_numpy=True)
-        faiss.normalize_L2(query_vector)
-        distances_faiss, indices_faiss = faiss_index.search(query_vector, top_n * 2)
+    # 3. Query Pinecone (Cloud Hybrid Search)
+    # Pinecone natively combines dense and sparse vectors via alpha weighting
+    # Alpha = 0.5 means equal weight
+    
+    query_params = {
+        "vector": dense_vector,
+        "top_k": top_n,
+        "include_metadata": True
+    }
+    
+    if algorithm == "hybrid" and sparse_vector:
+        query_params["sparse_vector"] = sparse_vector
+        # In Pinecone, if both are provided, it does a dot-product hybrid search automatically
         
-        for rank, i in enumerate(indices_faiss[0]):
-            if i == idx: continue
-            scores[i] = scores.get(i, 0) + (1.0 / (rank + 1)) * 0.6
-
-    # Sort by score descending
-    sorted_indices = sorted(scores, key=scores.get, reverse=True)[:top_n]
+    try:
+        response = pc_index.query(**query_params)
+    except Exception as e:
+        return {"error": f"Pinecone search failed: {e}"}
 
     results = []
-
-    for i in sorted_indices:
-        row = movies.iloc[i]
-
+    
+    # 4. Process Cloud Results
+    for match in response.matches:
+        metadata = match.metadata
+        
         poster_url = ""
-        if isinstance(row['poster_path'], str):
-            poster_url = f"https://image.tmdb.org/t/p/w500{row['poster_path']}"
+        if isinstance(metadata.get('poster_path'), str):
+            poster_url = f"https://image.tmdb.org/t/p/w500{metadata['poster_path']}"
 
-        # Generate Explainability Reason only for Hybrid mode to save API calls
-        explanation = "Similarity match."
+        explanation = "High similarity match based on content and semantics."
         if algorithm == "hybrid" and len(results) == 0:
-             explanation = generate_explanation(movie_title, row['title'], row['overview'])
+             explanation = generate_explanation(movie_title, metadata['title'], metadata.get('overview', ''))
 
         results.append({
-            "title": row['title'],
+            "title": metadata['title'],
             "poster": poster_url,
-            "link": f"https://www.themoviedb.org/movie/{int(row['id'])}",
+            "link": f"https://www.themoviedb.org/movie/{match.id}",
             "explanation": explanation
         })
 

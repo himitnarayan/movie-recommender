@@ -1,17 +1,14 @@
-# 🎬 Movie Recommender System — Advanced Hybrid ML Web App
+# 🎬 Movie Recommender System — Advanced Cloud Hybrid Search Web App
 
-A production-style **Hybrid Movie Recommendation System** built for scale and accuracy, demonstrating modern Data Science and MLOps practices.
+A production-style **Hybrid Movie Recommendation System** built for extreme scale, demonstrating modern Data Science, MLOps, and Cloud Vector Search practices.
 
-### 🌟 Key Data Science Features
-- 🧠 **Hybrid Search Architecture**: Combines **TF-IDF Vectorization** (for keyword matching) with **Sentence Transformers** (Neural Embeddings for semantic meaning).
-- ⚡ **Vector Database Integration**: Uses **FAISS (Facebook AI Similarity Search)** for high-performance dense vector retrieval.
-- 📊 **MLOps & Tracking**: Implements **MLflow** for tracking model parameters, dataset sizes, and artifacts.
-- 📈 **Offline Evaluation**: Includes a custom evaluation pipeline (`evaluation.py`) that calculates **NDCG@10** and **Precision@10** to rigorously test recommendation quality against ground-truth clusters.
+### 🌟 Key Data Science & Cloud Features
+- ☁️ **Cloud Vector Database (Pinecone)**: Overcomes memory limitations by hosting the 930k embeddings on a free Pinecone serverless cluster.
+- 🧠 **Hybrid Search Architecture**: Combines **BM25 Sparse Vectors** (for keyword matching) with **Dense Neural Embeddings** (SentenceTransformers) natively inside Pinecone.
+- 🚀 **Google Colab Training Pipeline**: The massive dataset is downloaded, vectorized, and uploaded to Pinecone completely for free using a Colab T4 GPU (`colab_training_script.py`).
 - 🤖 **LLM Explainability (XAI)**: Integrates with the **Google Gemini API** to generate one-sentence personalized explanations for *why* a movie was recommended.
-- 🌐 **Django REST API**: Serves the ML models via a robust web backend.
-- ☁️ **Deployed on Render**: Automatically downloads the Kaggle TMDB dataset during build and processes embeddings on the fly.
-
-> ⚡ This project follows **real ML engineering practices** — models are evaluated offline, tracked with MLflow, and artifacts are created during deployment, not stored in GitHub.
+- 🐳 **Dockerized Deployment**: Fully containerized with a `Dockerfile` and `docker-compose.yml`.
+- 🌐 **Django REST API**: Extremely lightweight web backend (runs easily on 512MB RAM free tiers since the heavy lifting is offloaded to Pinecone).
 
 ---
 
@@ -21,18 +18,20 @@ A production-style **Hybrid Movie Recommendation System** built for scale and ac
 
 ---
 
-## 🧠 How It Works
+## 🧠 How It Works (Cloud Architecture)
 
-1. Kaggle TMDB dataset (~930k movies) is downloaded during deploy.
-2. Top **10,000 popular movies** are selected (for memory-safe dense embedding generation).
-3. Metadata "soup" is created (Overview, Genres, Keywords, Director).
-4. **TF-IDF Vectorization** (30,000 features) is trained and saved.
-5. **Neural Embeddings** (`all-MiniLM-L6-v2`) generate dense vectors for semantic understanding.
-6. A **FAISS Index** is built and saved for sub-millisecond similarity search.
-7. During inference, the Django API performs a **Hybrid Search** (combining TF-IDF and FAISS distances).
-8. The **Gemini LLM** generates a brief explanation for the top recommendation.
+1. **Training (Colab GPU):**
+   - The Kaggle TMDB dataset (~930k movies) is loaded.
+   - `SentenceTransformers` generates Dense Vectors.
+   - `BM25Encoder` generates Sparse Vectors.
+   - Vectors are upserted into Pinecone.
+2. **Inference (Django on Render):**
+   - User types a query (e.g., "The Matrix").
+   - Django encodes the query into Dense/Sparse vectors.
+   - Django queries the Pinecone API for top 10 matches.
+   - The **Gemini LLM** generates a brief explanation for the top recommendation.
 
 ---
 
 ## 🏗️ Architecture
-`Data Ingestion -> Vectorization (TF-IDF + Transformers) -> MLflow Tracking -> FAISS / NearestNeighbors -> Django API (with LLM Explainability) -> UI`
+`Colab GPU (Generate Vectors) -> Pinecone DB (Store & Search) -> Django API (LLM Explainability) -> UI`

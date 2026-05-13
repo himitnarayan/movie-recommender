@@ -1,13 +1,21 @@
 # Ignore data and artifacts
-recommenders/data/
+recommender/data/
 recommender/artifacts/
 
 # Ignore generated files
 *.csv
 *.npz
 *.pkl
+*.bin
+*.json
 staticfiles/
+
+# Virtual Environment
+venv/
+.env
 
 # Python
 __pycache__/
 *.pyc
+mlruns/
+mlflow.db
