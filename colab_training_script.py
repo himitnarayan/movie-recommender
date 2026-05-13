@@ -9,7 +9,7 @@ GOOGLE COLAB TRAINING SCRIPT
 Make sure you get a free API key from https://www.pinecone.io/
 """
 
-# !pip install pandas sentence-transformers pinecone-client pinecone-text kaggle
+# !pip install pandas sentence-transformers pinecone pinecone-text kaggle
 
 import os
 import pandas as pd

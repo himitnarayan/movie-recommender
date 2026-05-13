@@ -10,5 +10,5 @@ sentence-transformers
 faiss-cpu
 google-generativeai
 python-dotenv
-pinecone-client
+pinecone
 pinecone-text
