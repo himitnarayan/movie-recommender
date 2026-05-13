@@ -25,20 +25,22 @@ os.environ["PINECONE_API_KEY"] = "YOUR_PINECONE_API_KEY"
 INDEX_NAME = "movie-hybrid-search"
 
 # --- 2. DOWNLOAD DATASET ---
-# Assuming you uploaded kaggle.json to colab, or you can just download the dataset manually
-# !kaggle datasets download -d asaniczka/tmdb-movies-dataset-2023-930k-movies --unzip
-print("Loading dataset...")
-# df = pd.read_csv("TMDB_movie_dataset_v11.csv")
+# Because this dataset is large, we download it directly using Kaggle
+# You will need to upload your kaggle.json API key file to Colab first!
+import subprocess
+print("Downloading Kaggle Dataset...")
+subprocess.run("mkdir -p ~/.kaggle && cp kaggle.json ~/.kaggle/ && chmod 600 ~/.kaggle/kaggle.json", shell=True)
+subprocess.run("kaggle datasets download -d asaniczka/tmdb-movies-dataset-2023-930k-movies --unzip", shell=True)
 
-# FOR TESTING IN COLAB WITHOUT KAGGLE, WE WILL USE A MOCK DATASET:
-data = {
-    'id': [1, 2, 3],
-    'title': ['The Dark Knight', 'Batman Begins', 'Toy Story'],
-    'overview': ['Batman fights the Joker in Gotham.', 'Bruce Wayne becomes Batman.', 'Toys come alive.'],
-    'genres': ["[{'name': 'Action'}]", "[{'name': 'Action'}]", "[{'name': 'Animation'}]"],
-    'poster_path': ['/dk.jpg', '/bb.jpg', '/ts.jpg']
-}
-df = pd.DataFrame(data) # Replace this with your actual Kaggle dataframe
+print("Loading dataset...")
+df = pd.read_csv("TMDB_movie_dataset_v11.csv")
+
+# We drop rows without an overview or title to keep data clean
+df = df.dropna(subset=["title", "overview"]).drop_duplicates("id")
+
+# If you want to test fast, you can limit the rows to the top 100k most popular:
+# df = df.sort_values(by="popularity", ascending=False).head(100000)
+
 
 def parse_names(text):
     try:
