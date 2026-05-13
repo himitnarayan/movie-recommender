@@ -60,7 +60,7 @@ def generate_explanation(query_title, recommended_title, recommended_overview):
         print(f"Gemini API Error: {e}")
         return "Because it shares similar themes, genres, or keywords."
 
-def recommend(movie_title, top_n=10):
+def recommend(movie_title, top_n=10, algorithm="hybrid"):
     load_model()
 
     if movie_title not in title_to_index:
@@ -69,31 +69,32 @@ def recommend(movie_title, top_n=10):
     idx = title_to_index[movie_title]
     query_overview = movies.iloc[idx]['overview']
 
+    scores = {}
+
     # 1. TF-IDF Search (Keyword Matching)
     distances_tfidf, indices_tfidf = nn_tfidf.kneighbors(
         tfidf_matrix[idx],
         n_neighbors=top_n * 2
     )
     
-    # 2. Semantic Search (FAISS)
-    query_text = f"{movie_title}: {query_overview}"
-    query_vector = embedder.encode([query_text], convert_to_numpy=True)
-    faiss.normalize_L2(query_vector)
-    distances_faiss, indices_faiss = faiss_index.search(query_vector, top_n * 2)
+    if algorithm in ["tfidf", "hybrid"]:
+        for rank, i in enumerate(indices_tfidf[0]):
+            if i == idx: continue
+            weight = 1.0 if algorithm == "tfidf" else 0.4
+            scores[i] = scores.get(i, 0) + (1.0 / (rank + 1)) * weight
 
-    # 3. Hybrid Scoring (Combining TF-IDF and Semantic Search)
-    # We create a dictionary of scores. Smaller rank is better.
-    scores = {}
-    
-    for rank, i in enumerate(indices_tfidf[0]):
-        if i == idx: continue
-        scores[i] = scores.get(i, 0) + (1.0 / (rank + 1)) * 0.4 # 40% weight to TF-IDF
+    # 2. Semantic Search (FAISS)
+    if algorithm == "hybrid":
+        query_text = f"{movie_title}: {query_overview}"
+        query_vector = embedder.encode([query_text], convert_to_numpy=True)
+        faiss.normalize_L2(query_vector)
+        distances_faiss, indices_faiss = faiss_index.search(query_vector, top_n * 2)
         
-    for rank, i in enumerate(indices_faiss[0]):
-        if i == idx: continue
-        scores[i] = scores.get(i, 0) + (1.0 / (rank + 1)) * 0.6 # 60% weight to Semantic
-        
-    # Sort by hybrid score descending
+        for rank, i in enumerate(indices_faiss[0]):
+            if i == idx: continue
+            scores[i] = scores.get(i, 0) + (1.0 / (rank + 1)) * 0.6
+
+    # Sort by score descending
     sorted_indices = sorted(scores, key=scores.get, reverse=True)[:top_n]
 
     results = []
@@ -105,11 +106,9 @@ def recommend(movie_title, top_n=10):
         if isinstance(row['poster_path'], str):
             poster_url = f"https://image.tmdb.org/t/p/w500{row['poster_path']}"
 
-        # Generate Explainability Reason (Using Gemini)
-        # Note: In production, you might do this asynchronously or in batch to avoid slow API responses.
-        # We'll just generate it for the top 1 result to keep the API fast, and use generic for others.
-        explanation = "High similarity match based on content and semantics."
-        if len(results) == 0: # Only explain the top recommendation to save time
+        # Generate Explainability Reason only for Hybrid mode to save API calls
+        explanation = "Similarity match."
+        if algorithm == "hybrid" and len(results) == 0:
              explanation = generate_explanation(movie_title, row['title'], row['overview'])
 
         results.append({
