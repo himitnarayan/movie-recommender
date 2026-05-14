@@ -32,8 +32,9 @@ print("Downloading Kaggle Dataset...")
 subprocess.run("mkdir -p ~/.kaggle && cp kaggle.json ~/.kaggle/ && chmod 600 ~/.kaggle/kaggle.json", shell=True)
 subprocess.run("kaggle datasets download -d asaniczka/tmdb-movies-dataset-2023-930k-movies --unzip", shell=True)
 
+import csv
 print("Loading dataset...")
-df = pd.read_csv("TMDB_movie_dataset_v11.csv", lineterminator='\n', on_bad_lines='skip', low_memory=False)
+df = pd.read_csv("TMDB_movie_dataset_v11.csv", engine='python', on_bad_lines='skip', quoting=csv.QUOTE_NONE)
 
 # We drop rows without an overview or title to keep data clean
 df = df.dropna(subset=["title", "overview"]).drop_duplicates("id")
