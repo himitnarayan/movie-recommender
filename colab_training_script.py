@@ -104,12 +104,18 @@ for i in tqdm(range(0, len(df), batch_size)):
     # 5. Assemble and Upsert
     records = []
     for j in range(len(ids)):
-        records.append({
+        record = {
             "id": ids[j],
             "values": dense_vectors[j],
-            "sparse_values": sparse_vectors[j],
             "metadata": metadata[j]
-        })
+        }
+        
+        # Pinecone crashes if sparse vector is empty (e.g., if a movie has no description)
+        # So we only include sparse_values if the BM25 encoder actually found valid tokens
+        if sparse_vectors[j] and len(sparse_vectors[j].get("indices", [])) > 0:
+            record["sparse_values"] = sparse_vectors[j]
+            
+        records.append(record)
         
     index.upsert(vectors=records)
 
