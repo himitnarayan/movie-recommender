@@ -34,7 +34,7 @@ subprocess.run("kaggle datasets download -d asaniczka/tmdb-movies-dataset-2023-9
 
 import csv
 print("Loading dataset...")
-df = pd.read_csv("TMDB_movie_dataset_v11.csv", engine='python', on_bad_lines='skip', quoting=csv.QUOTE_NONE)
+df = pd.read_csv("TMDB_movie_dataset_v11.csv", engine='python', on_bad_lines='skip')
 df.columns = df.columns.str.replace('"', '').str.strip()
 
 # We drop rows without an overview or title to keep data clean
