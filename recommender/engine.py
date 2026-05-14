@@ -1,19 +1,17 @@
 import os
+import requests
 from pinecone import Pinecone
-from pinecone_text.sparse import BM25Encoder
 import google.generativeai as genai
-from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
 
 load_dotenv()
 
 # Global placeholders
 pc_index = None
-embedder = None
 bm25 = None
 
 def load_cloud_models():
-    global pc_index, embedder, bm25
+    global pc_index, bm25
 
     if pc_index is None:
         print("Connecting to Pinecone Cloud Vector DB...")
@@ -27,30 +25,43 @@ def load_cloud_models():
         pc = Pinecone(api_key=pinecone_key)
         index_name = "movie-hybrid-search"
         
-        # Ensure the index exists, then connect
         if index_name in [idx.name for idx in pc.list_indexes()]:
             pc_index = pc.Index(index_name)
         else:
             print(f"Index {index_name} does not exist in Pinecone.")
             return
 
-        # 2. Load Neural Embedding Model (Small, runs fast in 512MB RAM)
-        embedder = SentenceTransformer("all-MiniLM-L6-v2")
-        
-        # 3. Load BM25 Sparse Encoder params (Created in Colab)
-        bm25 = BM25Encoder()
-        # In a real scenario, you download bm25_params.json from Colab and place it here
-        # bm25.load("recommender/artifacts/bm25_params.json")
-        # For this demo, we'll initialize a dummy one if file doesn't exist
+        # 2. Load BM25 Sparse Encoder params (Lazy Load to save RAM)
         try:
+            from pinecone_text.sparse import BM25Encoder
+            bm25 = BM25Encoder()
             bm25.load("recommender/artifacts/bm25_params.json")
-        except:
-            print("Warning: bm25_params.json not found. Sparse search will be skipped.")
+        except Exception as e:
+            print(f"Warning: BM25 Sparse search will be skipped. {e}")
 
-        # 4. Configure Gemini
+        # 3. Configure Gemini
         gemini_key = os.environ.get("GOOGLE_API_KEY")
         if gemini_key:
             genai.configure(api_key=gemini_key)
+
+def get_dense_vector(text):
+    # Using HuggingFace Free Inference API instead of local PyTorch to save 500MB of RAM!
+    api_url = "https://api-inference.huggingface.co/pipeline/feature-extraction/sentence-transformers/all-MiniLM-L6-v2"
+    headers = {}
+    hf_token = os.environ.get("HF_TOKEN")
+    if hf_token:
+        headers["Authorization"] = f"Bearer {hf_token}"
+        
+    try:
+        response = requests.post(api_url, headers=headers, json={"inputs": [text], "options":{"wait_for_model":True}})
+        if response.status_code == 200:
+            return response.json()[0]
+        else:
+            print(f"HF API Error: {response.text}")
+            return None
+    except Exception as e:
+        print(f"HF Request failed: {e}")
+        return None
 
 def generate_explanation(query_title, recommended_title, recommended_overview):
     try:
@@ -72,20 +83,20 @@ def recommend(movie_title, top_n=10, algorithm="hybrid"):
     if pc_index is None:
         return {"error": "Pinecone database is not connected. Add PINECONE_API_KEY."}
 
-    # 1. Encode user query into dense vector
-    dense_vector = embedder.encode(movie_title).tolist()
+    # 1. Encode user query into dense vector via API
+    dense_vector = get_dense_vector(movie_title)
+    if not dense_vector:
+        return {"error": "Failed to generate semantic embedding via API."}
     
     # 2. Encode user query into sparse vector
     sparse_vector = None
-    try:
-        sparse_vector = bm25.encode_queries(movie_title)
-    except:
-        pass # If BM25 isn't loaded, skip it
+    if bm25 is not None:
+        try:
+            sparse_vector = bm25.encode_queries(movie_title)
+        except Exception as e:
+            print(f"BM25 Error: {e}")
 
     # 3. Query Pinecone (Cloud Hybrid Search)
-    # Pinecone natively combines dense and sparse vectors via alpha weighting
-    # Alpha = 0.5 means equal weight
-    
     query_params = {
         "vector": dense_vector,
         "top_k": top_n,
@@ -94,7 +105,6 @@ def recommend(movie_title, top_n=10, algorithm="hybrid"):
     
     if algorithm == "hybrid" and sparse_vector:
         query_params["sparse_vector"] = sparse_vector
-        # In Pinecone, if both are provided, it does a dot-product hybrid search automatically
         
     try:
         response = pc_index.query(**query_params)
@@ -102,13 +112,10 @@ def recommend(movie_title, top_n=10, algorithm="hybrid"):
         return {"error": f"Pinecone search failed: {e}"}
 
     results = []
-    
-    # 4. Process Cloud Results
     for match in response.matches:
         metadata = match.metadata
-        
         poster_url = ""
-        if isinstance(metadata.get('poster_path'), str):
+        if isinstance(metadata.get('poster_path'), str) and metadata['poster_path']:
             poster_url = f"https://image.tmdb.org/t/p/w500{metadata['poster_path']}"
 
         explanation = "High similarity match based on content and semantics."
