@@ -46,11 +46,13 @@ def load_cloud_models():
 
 def get_dense_vector(text):
     # Using HuggingFace Free Inference API instead of local PyTorch to save 500MB of RAM!
-    api_url = "https://api-inference.huggingface.co/pipeline/feature-extraction/sentence-transformers/all-MiniLM-L6-v2"
+    api_url = "https://router.huggingface.co/hf-inference/models/sentence-transformers/all-MiniLM-L6-v2/pipeline/feature-extraction"
     headers = {}
     hf_token = os.environ.get("HF_TOKEN")
     if hf_token:
         headers["Authorization"] = f"Bearer {hf_token}"
+    else:
+        print("WARNING: HF_TOKEN not found. HuggingFace might reject the request with 401.")
         
     try:
         response = requests.post(api_url, headers=headers, json={"inputs": [text], "options":{"wait_for_model":True}})
