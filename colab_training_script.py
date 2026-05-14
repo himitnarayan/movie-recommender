@@ -38,7 +38,12 @@ df = pd.read_csv("TMDB_movie_dataset_v11.csv", engine='python', on_bad_lines='sk
 df.columns = df.columns.str.replace('"', '').str.strip()
 
 # We drop rows without an overview or title to keep data clean
-df = df.dropna(subset=["title", "overview"]).drop_duplicates("id")
+# We also force 'id' to be numeric (errors='coerce') to instantly drop any rows 
+# where commas inside the movie titles shifted the columns into the wrong place!
+df['id'] = pd.to_numeric(df['id'], errors='coerce')
+df = df.dropna(subset=["id", "title", "overview"]).drop_duplicates("id")
+# Make sure IDs are clean ASCII strings for Pinecone
+df['id'] = df['id'].astype(int).astype(str)
 
 # If you want to test fast, you can limit the rows to the top 100k most popular:
 # df = df.sort_values(by="popularity", ascending=False).head(100000)
