@@ -50,19 +50,36 @@ def load_cloud_models():
 
 def get_dense_vector(text):
     """
-    Uses Pinecone's own Inference API to generate embeddings.
-    Uses llama-text-embed-v2 with dimension=384 to match the existing Pinecone index.
-    No HuggingFace token needed!
+    Uses HuggingFace Inference API to generate 384-dim embeddings.
+    Requires a free HF_TOKEN set in your environment variables.
+    Get one free at: https://huggingface.co/settings/tokens
     """
+    import requests
+    hf_token = os.environ.get("HF_TOKEN")
+    if not hf_token:
+        print("ERROR: HF_TOKEN environment variable is not set.")
+        return None
+
+    api_url = "https://router.huggingface.co/hf-inference/models/sentence-transformers/all-MiniLM-L6-v2/pipeline/feature-extraction"
+    headers = {"Authorization": f"Bearer {hf_token}"}
+
     try:
-        embeddings = pc_client.inference.embed(
-            model="llama-text-embed-v2",
-            inputs=[text],
-            parameters={"input_type": "query", "truncate": "END", "dimension": 384}
+        response = requests.post(
+            api_url,
+            headers=headers,
+            json={"inputs": [text], "options": {"wait_for_model": True}}
         )
-        return embeddings[0].values
+        if response.status_code == 200:
+            result = response.json()
+            # API returns a nested list: [[vector]] — we want the inner list
+            if isinstance(result, list) and isinstance(result[0], list):
+                return result[0]
+            return result
+        else:
+            print(f"HF API Error ({response.status_code}): {response.text[:200]}")
+            return None
     except Exception as e:
-        print(f"Pinecone Inference Error: {e}")
+        print(f"HF Request failed: {e}")
         return None
 
 

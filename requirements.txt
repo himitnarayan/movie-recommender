@@ -5,3 +5,4 @@ pinecone
 pinecone-text
 google-generativeai
 python-dotenv
+requests
