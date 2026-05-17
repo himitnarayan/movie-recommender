@@ -51,14 +51,14 @@ def load_cloud_models():
 def get_dense_vector(text):
     """
     Uses Pinecone's own Inference API to generate embeddings.
-    No HuggingFace token needed — works with your existing PINECONE_API_KEY!
-    Model: multilingual-e5-large (1024-dim) is available for free on Pinecone Inference.
+    Uses llama-text-embed-v2 with dimension=384 to match the existing Pinecone index.
+    No HuggingFace token needed!
     """
     try:
         embeddings = pc_client.inference.embed(
-            model="multilingual-e5-large",
+            model="llama-text-embed-v2",
             inputs=[text],
-            parameters={"input_type": "query", "truncate": "END"}
+            parameters={"input_type": "query", "truncate": "END", "dimension": 384}
         )
         return embeddings[0].values
     except Exception as e:
