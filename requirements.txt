@@ -1,13 +1,7 @@
 Django
 djangorestframework
 gunicorn
-pandas
-scikit-learn
-scipy
-tqdm
-mlflow
-google-generativeai
-python-dotenv
 pinecone
 pinecone-text
-requests
+google-generativeai
+python-dotenv
