@@ -1,13 +1,14 @@
-# Ignore data and artifacts
+# Ignore data and large artifacts
 recommender/data/
-recommender/artifacts/
+recommender/artifacts/*.bin
+recommender/artifacts/*.pkl
+recommender/artifacts/*.npz
+recommender/artifacts/*.csv
+
+# Allow the BM25 model (needed for Hybrid Search on the server)
+!recommender/artifacts/bm25_params.json
 
 # Ignore generated files
-*.csv
-*.npz
-*.pkl
-*.bin
-*.json
 staticfiles/
 
 # Virtual Environment
